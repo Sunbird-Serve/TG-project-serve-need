@@ -53,7 +53,7 @@ public class NeedDiscoveryService {
     }
 
     // Fetch all the entities 
-    public Page<Entity> getAllEntity(EntityStatus status, Pageable pageable) {
+    public Page<NeedEntity> getAllEntity(EntityStatus status, Pageable pageable) {
         return entityRepository.findAllByStatus(status, pageable);
     }
 
@@ -67,15 +67,52 @@ public class NeedDiscoveryService {
         }
     }
 
-    // Fetch need by status
-    public Page<NeedEntityAndRequirement> getNeedsByStatus(NeedStatus status, Pageable pageable) {
+    // Fetch need with full details (requirement, occurrence, timeslots) by needId
+    public Optional<NeedEntityAndRequirement> getNeedDetailsById(UUID needId) {
         try {
-            Page<Need> needsPage = needDiscoveryRepository.findAllByStatus(status, pageable);
+            Optional<Need> need = needDiscoveryRepository.findById(needId);
+            if (need.isEmpty()) return Optional.empty();
+
+            Need n = need.get();
+            Optional<NeedRequirement> needRequirement = Optional.empty();
+            Optional<Occurrence> occurrence = Optional.empty();
+            List<TimeSlot> slots = List.of();
+
+            if (n.getRequirementId() != null) {
+                needRequirement = needRequirementRepository.findById(UUID.fromString(n.getRequirementId()));
+                if (needRequirement.isPresent() && needRequirement.get().getOccurrenceId() != null) {
+                    String occurrenceId = needRequirement.get().getOccurrenceId();
+                    occurrence = occurrenceRepository.findById(UUID.fromString(occurrenceId));
+                    slots = timeSlotRepository.findByOccurrenceId(occurrenceId);
+                }
+            }
+
+            return Optional.of(NeedEntityAndRequirement.builder()
+                    .need(n)
+                    .needRequirement(needRequirement)
+                    .occurrence(occurrence)
+                    .timeSlots(slots)
+                    .build());
+        } catch (Exception e) {
+            logger.error("Error fetching Need details by ID: {}", needId, e);
+            throw new RuntimeException("Error fetching Need details by ID", e);
+        }
+    }
+
+    // Fetch need by status (agency-scoped if agencyId provided)
+    public Page<NeedEntityAndRequirement> getNeedsByStatus(NeedStatus status, String agencyId, Pageable pageable) {
+        try {
+            Page<Need> needsPage;
+            if (agencyId != null) {
+                needsPage = needDiscoveryRepository.findAllByAgencyIdAndStatus(agencyId, status, pageable);
+            } else {
+                needsPage = needDiscoveryRepository.findAllByStatus(status, pageable);
+            }
 
             return needsPage.map(need -> {
                 try {
                     Optional<NeedRequirement> needRequirement = needRequirementRepository.findById(UUID.fromString(need.getRequirementId()));
-                    Optional<Entity> entity = entityRepository.findById(UUID.fromString(need.getEntityId()));
+                    Optional<NeedEntity> entity = entityRepository.findById(UUID.fromString(need.getEntityId()));
                     Optional<NeedType> needType = needTypeRepository.findById(UUID.fromString(need.getNeedTypeId()));
 
                     Optional<Occurrence> occurrence = Optional.empty();
@@ -161,6 +198,16 @@ public Page<Need> getNeedByEntityIds(List<String> entityIds, Pageable pageable) 
         } catch (Exception e) {
             logger.error("Error fetching Needs by UserId and NeedTypeId: {} {}", userId, needTypeId, e);
             throw new RuntimeException("Error fetching Needs by UserId and NeedTypeId", e);
+        }
+    }
+
+    // Fetch needs by agencyId
+    public Page<Need> getNeedsByAgencyId(String agencyId, Pageable pageable) {
+        try {
+            return needDiscoveryRepository.findAllByAgencyId(agencyId, pageable);
+        } catch (Exception e) {
+            logger.error("Error fetching Needs by AgencyId: {}", agencyId, e);
+            throw new RuntimeException("Error fetching Needs by AgencyId", e);
         }
     }
 }

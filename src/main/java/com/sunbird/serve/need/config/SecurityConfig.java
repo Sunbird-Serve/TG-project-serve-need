@@ -2,11 +2,13 @@ package com.sunbird.serve.need.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -15,73 +17,71 @@ import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
-@Profile({"dev", "test"})
+@EnableMethodSecurity   // enables @PreAuthorize on controller methods
 public class SecurityConfig {
+
+    private final KeycloakJwtAuthenticationConverter keycloakJwtAuthenticationConverter;
+    private final JwtTenantFilter jwtTenantFilter;
+    private final SecurityErrorHandler securityErrorHandler;
+
+    public SecurityConfig(KeycloakJwtAuthenticationConverter keycloakJwtAuthenticationConverter,
+                          JwtTenantFilter jwtTenantFilter,
+                          SecurityErrorHandler securityErrorHandler) {
+        this.keycloakJwtAuthenticationConverter = keycloakJwtAuthenticationConverter;
+        this.jwtTenantFilter = jwtTenantFilter;
+        this.securityErrorHandler = securityErrorHandler;
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // Disable CSRF for API endpoints
             .csrf(AbstractHttpConfigurer::disable)
-            
-            // Configure CORS
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            
-            // Configure authorization
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
-                // Allow Swagger UI and API docs
+                // Public — no token required
                 .requestMatchers(
+                    "/actuator/health",
+                    "/actuator/info",
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/v3/api-docs/**",
                     "/swagger-resources/**",
                     "/webjars/**"
                 ).permitAll()
-                
-                // Allow H2 console for testing (only in test profile)
-                .requestMatchers("/h2-console/**").permitAll()
-                
-                // Allow all API endpoints (for development)
-                .requestMatchers("/api/**").permitAll()
-                
-                // Allow actuator endpoints for monitoring
-                .requestMatchers("/actuator/**").permitAll()
-                
-                // Allow all other requests (for development)
-                .anyRequest().permitAll()
+                // Public read access to approved needs (for volunteer browsing)
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/need/").permitAll()
+                // Everything else requires a valid JWT
+                // Fine-grained role checks are on each controller method via @PreAuthorize
+                .anyRequest().authenticated()
             )
-            
-            // Disable HTTP Basic authentication
-            .httpBasic(AbstractHttpConfigurer::disable)
-            
-            // Disable form login
-            .formLogin(AbstractHttpConfigurer::disable);
-        
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtAuthenticationConverter))
+                .authenticationEntryPoint(securityErrorHandler)
+            )
+            .exceptionHandling(ex -> ex.accessDeniedHandler(securityErrorHandler))
+            // Run tenant filter after JWT is validated
+            .addFilterAfter(jwtTenantFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Allow all origins for development (restrict this in production)
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        
-        // Allow common HTTP methods
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://serve-v1.evean.net",
+            "https://*.serve-v1.evean.net"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        
-        // Allow all headers
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        
-        // Allow credentials
         configuration.setAllowCredentials(true);
-        
-        // Set max age
         configuration.setMaxAge(3600L);
-        
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-        
         return source;
     }
-} 
+}

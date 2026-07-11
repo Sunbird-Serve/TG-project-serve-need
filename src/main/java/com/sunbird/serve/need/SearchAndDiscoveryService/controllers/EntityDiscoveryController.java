@@ -6,10 +6,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import com.sunbird.serve.need.models.Need.Need;
-import com.sunbird.serve.need.models.Need.Entity;
+import com.sunbird.serve.need.models.Need.NeedEntity;
 import com.sunbird.serve.need.models.request.EntityRequest;
 import com.sunbird.serve.need.models.request.EntityMappingRequest;
-import com.sunbird.serve.need.models.Need.EntityMapping;
+import com.sunbird.serve.need.models.Need.UserMapping;
 import com.sunbird.serve.need.models.enums.NeedStatus;
 import com.sunbird.serve.need.models.enums.EntityStatus;
 import com.sunbird.serve.need.models.response.NeedEntityAndRequirement;
@@ -31,6 +31,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.CrossOrigin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -59,24 +60,26 @@ public class EntityDiscoveryController {
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/entity/")
-    public ResponseEntity<Page<Entity>> getAllEntity(
+    public ResponseEntity<Page<NeedEntity>> getAllEntity(
          @RequestParam(defaultValue = "0") @Parameter(description = "Page number (default: 0)") int page,
             @RequestParam(defaultValue = "10") @Parameter(description = "Page size (default: 10)") int size, 
             @RequestParam EntityStatus status)
     {
         Pageable pageable = PageRequest.of(page, size);
-        Page<Entity> allEntity = entityDiscoveryService.getAllEntity(status, pageable);
+        Page<NeedEntity> allEntity = entityDiscoveryService.getAllEntity(status, pageable);
         return ResponseEntity.ok(allEntity);
     }
 
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/entity/all")
-public ResponseEntity<Page<Entity>> getAllEntities(
+    public ResponseEntity<Page<NeedEntity>> getAllEntities(
     @RequestParam(defaultValue = "0") int page,
     @RequestParam(defaultValue = "1000") int size) 
 {
     Pageable pageable = PageRequest.of(page, size);
-    Page<Entity> allEntities = entityDiscoveryService.getAllEntities(pageable);
+    Page<NeedEntity> allEntities = entityDiscoveryService.getAllEntities(pageable);
     return ResponseEntity.ok(allEntities);
 }
 
@@ -88,11 +91,12 @@ public ResponseEntity<Page<Entity>> getAllEntities(
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/entity/{entityId}")
-    public ResponseEntity<Entity> getEntityById(
+    public ResponseEntity<NeedEntity> getEntityById(
          @PathVariable UUID entityId)
     {
-        Optional<Entity> entity = entityDiscoveryService.getEntityById(entityId);
+        Optional<NeedEntity> entity = entityDiscoveryService.getEntityById(entityId);
         return entity.map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -106,14 +110,15 @@ public ResponseEntity<Page<Entity>> getAllEntities(
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/userList/{entityId}")
-public ResponseEntity<Page<EntityMapping>> getAllUserId(
+public ResponseEntity<Page<UserMapping>> getAllUserId(
         @PathVariable(required = true) @Parameter(description = "Entity ID") UUID entityId,
             @RequestParam(required = false, defaultValue = "0")  Integer page,
             @RequestParam(required = false, defaultValue = "10")  Integer size) {
 
     Pageable pageable = PageRequest.of(page, size);
-    Page<EntityMapping> entityMapping;
+    Page<UserMapping> entityMapping;
 
     // Fetch entity id based on needAdminId
         entityMapping = entityDiscoveryService.getUsersByEntityId(entityId, pageable);
@@ -129,14 +134,15 @@ public ResponseEntity<Page<EntityMapping>> getAllUserId(
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/entityDetails/{userId}")
-public ResponseEntity<Page<Entity>> getAllEntityDetails(
+public ResponseEntity<Page<NeedEntity>> getAllEntityDetails(
         @PathVariable(required = true) @Parameter(description = "Need Admin ID") String userId,
             @RequestParam(required = false, defaultValue = "0")  Integer page,
             @RequestParam(required = false, defaultValue = "10")  Integer size) {
 
     Pageable pageable = PageRequest.of(page, size);
-    Page<Entity> entity;
+    Page<NeedEntity> entity;
 
     // Fetch entity id based on needAdminId
         entity = entityDiscoveryService.getEntitiesByUserId(userId, pageable);
@@ -151,9 +157,10 @@ public ResponseEntity<Page<Entity>> getAllEntityDetails(
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("hasAnyRole('sAdmin', 'nAdmin')")
     @PostMapping("/entity/create")
-    public ResponseEntity<Entity> createEntity(@RequestBody EntityRequest request, @RequestHeader Map<String, String> headers) {
-        Entity response = entityDiscoveryService.createEntity(request, headers);
+    public ResponseEntity<NeedEntity> createEntity(@RequestBody EntityRequest request, @RequestHeader Map<String, String> headers) {
+        NeedEntity response = entityDiscoveryService.createEntity(request, headers);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -164,9 +171,10 @@ public ResponseEntity<Page<Entity>> getAllEntityDetails(
             @ApiResponse(responseCode = "404", description = "Entity Not Found"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("hasAnyRole('sAdmin', 'nAdmin')")
     @PutMapping("entity/edit/{id}")
-    public ResponseEntity<Entity> editEntity(@PathVariable UUID id, @RequestBody EntityRequest request, @RequestHeader Map<String, String> headers) {
-        Entity response = entityDiscoveryService.editEntity(id, request, headers);
+    public ResponseEntity<NeedEntity> editEntity(@PathVariable UUID id, @RequestBody EntityRequest request, @RequestHeader Map<String, String> headers) {
+        NeedEntity response = entityDiscoveryService.editEntity(id, request, headers);
         return ResponseEntity.ok(response);
     }
 
@@ -177,9 +185,10 @@ public ResponseEntity<Page<Entity>> getAllEntityDetails(
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("hasAnyRole('sAdmin', 'nAdmin')")
     @PostMapping("/entity/assign")
-    public ResponseEntity<EntityMapping> assignEntity(@RequestBody EntityMappingRequest request, @RequestHeader Map<String, String> headers) {
-        EntityMapping response = entityDiscoveryService.assignEntity(request, headers);
+    public ResponseEntity<UserMapping> assignEntity(@RequestBody EntityMappingRequest request, @RequestHeader Map<String, String> headers) {
+        UserMapping response = entityDiscoveryService.assignEntity(request, headers);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -190,9 +199,10 @@ public ResponseEntity<Page<Entity>> getAllEntityDetails(
             @ApiResponse(responseCode = "404", description = "Entity Mapping Not Found"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("hasAnyRole('sAdmin', 'nAdmin')")
     @PutMapping("/assign/edit/{id}")
-    public ResponseEntity<EntityMapping> editAssignedEntity(@PathVariable UUID id, @RequestBody EntityMappingRequest request, @RequestHeader Map<String, String> headers) {
-        EntityMapping updatedMapping = entityDiscoveryService.editAssignedEntity(id, request, headers);
+    public ResponseEntity<UserMapping> editAssignedEntity(@PathVariable UUID id, @RequestBody EntityMappingRequest request, @RequestHeader Map<String, String> headers) {
+        UserMapping updatedMapping = entityDiscoveryService.editAssignedEntity(id, request, headers);
         return ResponseEntity.ok(updatedMapping);
     }
 
@@ -203,6 +213,7 @@ public ResponseEntity<Page<Entity>> getAllEntityDetails(
             @ApiResponse(responseCode = "400", description = "Bad Input"),
             @ApiResponse(responseCode = "500", description = "Server Error")}
     )
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/needs/{userId}")
     public ResponseEntity<Page<Need>> getAllNeedsByUserId(
             @PathVariable @Parameter(description = "Need Admin ID") String userId,
@@ -212,6 +223,24 @@ public ResponseEntity<Page<Entity>> getAllEntityDetails(
         Pageable pageable = PageRequest.of(page, size);
         Page<Need> needs = entityDiscoveryService.getNeedsByUserId(userId, pageable);
         return ResponseEntity.ok(needs);
+    }
+
+    // New: Fetch all entities for a specific agency
+    @Operation(summary = "Fetch all Entities by Agency Id", description = "Fetch all Entities for a specific agency")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Successfully Fetched Entities", content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE)),
+            @ApiResponse(responseCode = "400", description = "Bad Input"),
+            @ApiResponse(responseCode = "500", description = "Server Error")}
+    )
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/entity/agency/{agencyId}")
+    public ResponseEntity<Page<NeedEntity>> getEntitiesByAgencyId(
+            @PathVariable @Parameter(description = "Agency ID") String agencyId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<NeedEntity> entities = entityDiscoveryService.getEntitiesByAgencyId(agencyId, pageable);
+        return ResponseEntity.ok(entities);
     }
 
 }
