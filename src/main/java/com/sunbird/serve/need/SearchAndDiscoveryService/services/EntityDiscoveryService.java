@@ -10,6 +10,8 @@ import com.sunbird.serve.need.models.enums.UserRole;
 import com.sunbird.serve.need.models.request.EntityRequest;
 import com.sunbird.serve.need.models.request.EntityMappingRequest;
 
+import com.sunbird.serve.need.config.TenantContext;
+
 import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
@@ -38,10 +40,18 @@ public class EntityDiscoveryService {
     }
 
     public Page<NeedEntity> getAllEntity(EntityStatus status, Pageable pageable) {
+        String agencyId = TenantContext.getAgencyId();
+        if (agencyId != null && !agencyId.isBlank()) {
+            return entitySearchRepository.findAllByAgencyIdAndStatus(agencyId, status, pageable);
+        }
         return entitySearchRepository.findAllByStatus(status, pageable);
     }
 
     public Page<NeedEntity> getAllEntities(Pageable pageable) {
+        String agencyId = TenantContext.getAgencyId();
+        if (agencyId != null && !agencyId.isBlank()) {
+            return entitySearchRepository.findAllByAgencyId(agencyId, pageable);
+        }
         return entitySearchRepository.findAll(pageable);
     }
 
@@ -56,6 +66,10 @@ public class EntityDiscoveryService {
 
     public Page<NeedEntity> getEntitiesByUserId(String userId, Pageable pageable) {
         try {
+            String agencyId = TenantContext.getAgencyId();
+            if (agencyId != null && !agencyId.isBlank()) {
+                return entitySearchRepository.findEntitiesByAgencyIdAndUserId(agencyId, userId, pageable);
+            }
             return entitySearchRepository.findEntitiesByUserId(userId, pageable);
         } catch (Exception e) {
             logger.error("Error fetching Entities by UserId: {}", userId, e);
@@ -86,18 +100,19 @@ public class EntityDiscoveryService {
     }
 
     public NeedEntity createEntity(EntityRequest request, Map<String, String> headers) {
+        String agencyId = TenantContext.getAgencyId();
         NeedEntity entity = NeedEntity.builder()
             .name(request.getName())
             .registrationId(request.getRegistrationId())
             .website(request.getWebsite())
-            .addressLine1(request.getAddressLine1())
+            .block(request.getBlock())
             .mobile(request.getMobile())
             .district(request.getDistrict())
             .state(request.getState())
             .pincode(request.getPincode())
             .category(request.getCategory())
             .status(request.getStatus())
-            .agencyId(headers.get("x-agency-id"))
+            .agencyId(agencyId)
             .build();
         return entitySearchRepository.save(entity);
     }
@@ -108,7 +123,7 @@ public class EntityDiscoveryService {
                 if (request.getName() != null) entity.setName(request.getName());
                 if (request.getRegistrationId() != null) entity.setRegistrationId(request.getRegistrationId());
                 if (request.getWebsite() != null) entity.setWebsite(request.getWebsite());
-                if (request.getAddressLine1() != null) entity.setAddressLine1(request.getAddressLine1());
+                if (request.getBlock() != null) entity.setBlock(request.getBlock());
                 if (request.getMobile() != null) entity.setMobile(request.getMobile());
                 if (request.getDistrict() != null) entity.setDistrict(request.getDistrict());
                 if (request.getState() != null) entity.setState(request.getState());
@@ -121,8 +136,9 @@ public class EntityDiscoveryService {
     }
 
     public UserMapping assignEntity(EntityMappingRequest request, Map<String, String> headers) {
+        String agencyId = TenantContext.getAgencyId();
         UserMapping mapping = UserMapping.builder()
-            .agencyId(request.getAgencyId() != null ? request.getAgencyId() : headers.get("x-agency-id"))
+            .agencyId(request.getAgencyId() != null ? request.getAgencyId() : agencyId)
             .orgId(request.getEntityId())
             .userId(request.getUserId())
             .userRole(UserRole.valueOf(request.getUserRole()))
